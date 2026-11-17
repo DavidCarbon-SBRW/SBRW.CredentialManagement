@@ -13,15 +13,26 @@ on:
 
 jobs:
   release:
+    permissions:
+      id-token: write  # enable GitHub OIDC token issuance for this job
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
     - uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '8.x'
-    - run: dotnet nuget add source --username holistic-net --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/holistic-net/index.json"
+        dotnet-version: '10.x'
     - run: dotnet build --configuration Release
     - run: dotnet pack --configuration Release --output ./nupkgs
-    - run: dotnet nuget push "bin/Release/*.nupkg" --api-key ${{ secrets.GITHUB_TOKEN }} --source "github" --skip-duplicate
-    - run: dotnet nuget push "bin/Release/*.nupkg" --api-key ${{ secrets.NUGET_ORG_TOKEN }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-    
+    # Get a short-lived NuGet API key
+    - name: NuGet login (OIDC → temp API key)
+      uses: NuGet/login@v1
+      id: login
+      with:
+        user: ${{ secrets.NUGET_USER }}
+    # Push the package
+    - name: NuGet push
+      run: dotnet nuget push "bin/Release/*.nupkg" --api-key ${{steps.login.outputs.NUGET_API_KEY}} --source https://api.nuget.org/v3/index.json
+    - name: GitHub login
+      run: dotnet nuget add source --username holistic-net --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/holistic-net/index.json"
+    - name: GitHub push
+      run: dotnet nuget push "bin/Release/*.nupkg" --api-key ${{ secrets.GITHUB_TOKEN }} --source "github" --skip-duplicate
